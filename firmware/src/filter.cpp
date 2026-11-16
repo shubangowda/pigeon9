@@ -3,30 +3,11 @@
 // It is pure math with no hardware calls, so it can be tested on a laptop with logged flight data.
 // The noise values (Q and R) are tuned in Python first, then copied in here.
 
-class FlightKalmanFilter {
-private:
-
-// What the filter currently thinks: altitude (m) and vertical speed (m/s)
-float alt = 0.0f;
-float vel = 0.0f;
-
-// How confident the filter is in alt and vel (updates itself every loop)
-float P00 = 10.0f;
-float P01 = 0.0f;
-float P10 = 0.0f;
-float P11 = 10.0f;
-
-// How much to distrust our own prediction each loop
-float Q_alt = 0.01f;
-float Q_vel = 0.1f;
-
-// How noisy the barometer is
-float R = 4.0f;
-
-public:
+#include "filter.h"
 
 // Runs once per loop: takes the latest acceleration, baro altitude, and time step, and updates the filter
-void update(float accel, float baroAlt, float dt) {
+// (the FlightKalmanFilter:: part just says "this function belongs to that class")
+void FlightKalmanFilter::update(float accel, float baroAlt, float dt) {
 
   // Guess the new altitude: old altitude + distance traveled since the last loop
   alt = alt + vel * dt + 0.5f * accel * dt * dt;
@@ -66,17 +47,17 @@ void update(float accel, float baroAlt, float dt) {
 }
 
 // Lets other files read the filter's current altitude estimate (m)
-float getAlt() {
+float FlightKalmanFilter::getAlt() {
   return alt;
 }
 
 // Lets other files read the filter's current vertical speed estimate (m/s)
-float getVel() {
+float FlightKalmanFilter::getVel() {
   return vel;
 }
 
 // Call this while sitting on the pad: sets altitude and speed to 0 and goes back to being unsure
-void reset() {
+void FlightKalmanFilter::reset() {
   alt = 0.0f;
   vel = 0.0f;
   P00 = 10.0f;
@@ -84,4 +65,3 @@ void reset() {
   P10 = 0.0f;
   P11 = 10.0f;
 }
-};

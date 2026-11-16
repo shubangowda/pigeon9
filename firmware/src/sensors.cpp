@@ -52,15 +52,17 @@ bool sensorsBegin() {
     allGood = false;
   }
 
-  // Barometer: oversampling and the IIR filter average out noise, at the cost of a slower response
+  // Barometer: every reading starts a new measurement, and the library cancels one that is still running
+  // So each measurement must finish inside one 10 ms loop: no temperature oversampling and 2x pressure takes about 7 ms
+  // (more oversampling would take longer than the loop and every reading would be stale)
+  // The IIR filter smooths noise without making the measurement any slower
   if (!baro.begin_I2C()) {
     Serial.println("Barometer not found");
     allGood = false;
   } else {
-    baro.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
-    baro.setPressureOversampling(BMP3_OVERSAMPLING_4X);
+    baro.setTemperatureOversampling(BMP3_NO_OVERSAMPLING);
+    baro.setPressureOversampling(BMP3_OVERSAMPLING_2X);
     baro.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
-    baro.setOutputDataRate(BMP3_ODR_50_HZ);
   }
 
   // GPS: 10 updates per second, and "autoPVT" means it sends position data on its own so we never wait for it
@@ -68,7 +70,7 @@ bool sensorsBegin() {
     Serial.println("GPS not found");
     allGood = false;
   } else {
-    gps.setI2COutput(COMMS_TYPE_UBX);
+    gps.setI2COutput(COM_TYPE_UBX);
     gps.setNavigationFrequency(10);
     gps.setAutoPVT(true);
   }
@@ -78,12 +80,20 @@ bool sensorsBegin() {
 
 void sensorsZeroBaro() {
 
+  // The first readings after startup can be junk, so read a few and throw them away
+  for (int i = 0; i < 5; i++) {
+    baro.performReading();
+    delay(20);
+  }
+
   // Average 50 readings (about 1 second) so one noisy reading doesn't set the wrong "zero"
   float sum = 0.0f;
   int count = 0;
 
   for (int i = 0; i < 50; i++) {
-    if (baro.performReading()) {
+
+    // Only count readings that are believable (30000 to 110000 Pa covers every altitude we care about)
+    if (baro.performReading() && baro.pressure > 30000.0 && baro.pressure < 110000.0) {
       sum = sum + baro.pressure;
       count = count + 1;
     }
@@ -118,8 +128,8 @@ void sensorsRead(SensorData &data) {
   data.hy = hg.acceleration.y;
   data.hz = hg.acceleration.z;
 
-  // Barometer: performReading() waits for a fresh reading and returns false if it failed
-  data.baroValid = baro.performReading();
+  // Barometer: performReading() returns false if it failed, and we also reject pressures that make no sense
+  data.baroValid = baro.performReading() && baro.pressure > 30000.0 && baro.pressure < 110000.0;
 
   if (data.baroValid) {
     data.pressure = baro.pressure;
